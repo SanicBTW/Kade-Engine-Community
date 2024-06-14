@@ -8,6 +8,26 @@ import Ratings.RatingWindow;
 
 using StringTools;
 
+// sanco here, we are saving essential data for the notes so we can use them when needed
+// instead of having to use them with a whole ass graphic n shit yknow
+typedef SpawnNoteData =
+{
+	var strumTime:Float;
+	var noteData:Int;
+	var ?noteType:String;
+	var ?sustainLength:Float;
+	var ?prevNote:SpawnNoteData;
+	var ?sustainNote:Bool;
+	var ?inCharter:Bool;
+	var ?isPlayer:Bool;
+	var ?bet:Float;
+	var ?isParent:Bool;
+	var ?mustPress:Bool;
+	var ?children:Array<SpawnNoteData>;
+	var ?parent:SpawnNoteData;
+	var ?spotInLine:Int;
+}
+
 class Note extends FlxSprite
 {
 	public var strumTime:Float = 0;

@@ -1,7 +1,7 @@
 package;
 
 import Song.StyleData;
-import Song.Style;
+import Note.SpawnNoteData;
 import lime.utils.Assets as LimeAssets;
 import flixel.group.FlxSpriteGroup;
 import shader.Shaders;
@@ -418,6 +418,9 @@ class PlayState extends MusicBeatState
 	private var currentTimingShown:FlxText = new FlxText(0, 0, 0, "0ms");
 	private var rating:Rating;
 	private var introGroup:FlxTypedGroup<IntroSprite>;
+
+	// we save the note data so we can use it when recycling a note
+	private var noteQueue:Array<SpawnNoteData> = [];
 
 	// Adding Objects Using Lua
 	public function addObject(object:FlxBasic)
@@ -2035,12 +2038,26 @@ class PlayState extends MusicBeatState
 				if (PlayStateChangeables.opponentMode)
 					gottaHitNote = !gottaHitNote;
 
-				var oldNote:Note;
-				if (unspawnNotes.length > 0)
-					oldNote = unspawnNotes[Std.int(unspawnNotes.length - 1)];
+				// TODO: There's probably a bunch of fields I can remove from the typedef
+				var oldNote:SpawnNoteData;
+				if (noteQueue.length > 0)
+					oldNote = noteQueue[Std.int(noteQueue.length - 1)];
 				else
 					oldNote = null;
 
+				var swagNote:SpawnNoteData = {
+					strumTime: daStrumTime,
+					noteData: daNoteData,
+					prevNote: oldNote,
+					sustainNote: false,
+					inCharter: false,
+					isPlayer: gottaHitNote,
+					bet: daBeat,
+					noteType: daNoteType,
+					sustainLength: (PlayStateChangeables.holds) ? songNotes[2] / songMultiplier : 0,
+					children: [], // so it doesnt crash cuz of null ref
+				};
+				/*
 				var swagNote = new Note(daStrumTime, daNoteData, oldNote, false, false, gottaHitNote, daBeat);
 				swagNote.noteShit = daNoteType;
 
@@ -2053,7 +2070,7 @@ class PlayState extends MusicBeatState
 					swagNote.sustainLength = 0;
 				}
 
-				swagNote.scrollFactor.set(0, 0);
+					swagNote.scrollFactor.set(0, 0); */
 
 				var susLength:Float = swagNote.sustainLength;
 
@@ -2061,7 +2078,8 @@ class PlayState extends MusicBeatState
 				var anotherStepCrochet:Float = anotherCrochet / 4;
 				susLength = susLength / anotherStepCrochet;
 
-				unspawnNotes.push(swagNote);
+				// unspawnNotes.push(swagNote);
+				noteQueue.push(swagNote);
 
 				var type = 0;
 
@@ -2070,14 +2088,19 @@ class PlayState extends MusicBeatState
 					swagNote.isParent = true;
 					for (susNote in 0...Std.int(Math.max(susLength, 2)))
 					{
-						oldNote = unspawnNotes[Std.int(unspawnNotes.length - 1)];
-						var sustainNote = new Note(daStrumTime + (anotherStepCrochet * susNote) + anotherStepCrochet, daNoteData, oldNote, true, false,
-							gottaHitNote, 0);
+						oldNote = noteQueue[Std.int(noteQueue.length - 1)];
+						var sustainNote:SpawnNoteData = {
+							strumTime: daStrumTime + (anotherStepCrochet * susNote) + anotherStepCrochet,
+							noteData: daNoteData,
+							prevNote: oldNote,
+							sustainNote: true,
+							inCharter: false,
+							isPlayer: gottaHitNote,
+							bet: 0,
+							noteType: daNoteType,
+						};
 
-						sustainNote.noteShit = daNoteType;
-
-						sustainNote.scrollFactor.set();
-						unspawnNotes.push(sustainNote);
+						noteQueue.push(sustainNote);
 
 						sustainNote.mustPress = gottaHitNote;
 
@@ -2090,29 +2113,30 @@ class PlayState extends MusicBeatState
 
 				swagNote.mustPress = gottaHitNote;
 
-				if (swagNote.mustPress && !swagNote.isSustainNote)
+				if (swagNote.mustPress && !swagNote.sustainNote)
 					playerNotes++;
 				else if (!swagNote.mustPress)
 					opponentNotes++;
 
 				songNotesCount++;
 
+				/*
 				if (swagNote.mustPress)
 				{
 					swagNote.x += FlxG.width / 2; // general offset
-				}
+				}*/
 			}
 			daBeats += 1;
 		}
 
-		unspawnNotes.sort(sortByShit);
+		noteQueue.sort(sortByShit);
 
 		generatedMusic = true;
 		if (FlxG.save.data.gen)
 			Debug.logInfo('Generated Chart With A Time Of ' + Std.string(FlxMath.roundDecimal(haxe.Timer.stamp() - chartStamp, 3)) + " Seconds.");
 	}
 
-	function sortByShit(Obj1:Note, Obj2:Note):Int
+	function sortByShit(Obj1:SpawnNoteData, Obj2:SpawnNoteData):Int
 	{
 		return FlxSort.byValues(FlxSort.ASCENDING, Obj1.strumTime, Obj2.strumTime);
 	}
@@ -2447,16 +2471,21 @@ class PlayState extends MusicBeatState
 			FlxG.stage.window.borderless = false;
 		}
 
-		if (unspawnNotes[0] != null)
+		if (noteQueue[0] != null)
 		{
 			var shit:Float = 2000;
 			if (SONG.speed < 1 || scrollSpeed < 1)
 				shit /= scrollSpeed == 1 ? SONG.speed : scrollSpeed;
 			var time:Float = shit * songMultiplier;
 
-			while (unspawnNotes.length > 0 && unspawnNotes[0].strumTime - Conductor.songPosition < time)
+			while (noteQueue.length > 0 && noteQueue[0].strumTime - Conductor.songPosition < time)
 			{
-				var dunceNote:Note = unspawnNotes[0];
+				var spawnNote:SpawnNoteData = noteQueue[0];
+				var dunceNote:Note = notes.recycle(Note.new.bind(spawnNote.strumTime, spawnNote.noteData, notes.members[notes.members.length - 1],
+					spawnNote.sustainNote, false, spawnNote.isPlayer, spawnNote.bet));
+
+				dunceNote.mustPress = spawnNote.mustPress;
+				dunceNote.noteShit = spawnNote.noteType;
 
 				notes.insert(0, dunceNote);
 
@@ -2468,8 +2497,8 @@ class PlayState extends MusicBeatState
 				}
 				#end
 
-				var index:Int = unspawnNotes.indexOf(dunceNote);
-				unspawnNotes.splice(index, 1);
+				var index:Int = noteQueue.indexOf(spawnNote);
+				noteQueue.splice(index, 1);
 				currentLuaIndex++;
 			}
 		}
